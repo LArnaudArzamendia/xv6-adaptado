@@ -48,6 +48,40 @@ Puedes usar el debugger gdb para trazar la ejecución del código del kernel. Pa
 
 ## Compilación, Ejecución y Depuración
 
+Primero debemos estar seguros de que el set de herramientas de compilación necesario está instalado y operativo en nuestro ambiente de desarrollo. Para compilar xv6 y los programas de usuario, es necesario contar con un compilador GCC que genere binarios ejecutables para arquitectura Intel i386 de 32 bits, y en formato Executable and Linkable Format (ELF). Este formato es el nativo utilizado por Linux, entonces, si compilas en Linux (o Windows con WSL) normalmente no necesitarás instalar nada aparte.  
+
+**Instrucciones específicas para compilar en Linux**
+
+Para compilar en Linux, asegúrate de contar con GCC operativo. Respecto al código de xv6, asegúrate de que las líneas 37 y 38 del `Makefile` en el directorio raíz de este repositorio estén comentadas, y la línea 40 esté descomentada y se vea así:
+
+```Makefile
+TOOLPREFIX = 
+```
+
+En Linux se usa el GCC nativo instalado y por ello se deja el prefijo de herramientas GCC en blanco.
+
+**Instrucciones específicas para compilar en macOS**
+
+Si usas un Mac, con procesador Intel o ARM, tendrás que instalar una versión de GCC que genere binarios Intel de 32 bits en formato ELF.
+
+Si usas Mac, debes tener homebrew instalado. Luego, instalas GCC para i386-elf, con los siguientes comandos:
+
+```sh
+brew tap nativeos/i386-elf-toolchain
+brew install nativeos/i386-elf-toolchain/i386-elf-binutils
+brew install nativeos/i386-elf-toolchain/i386-elf-gcc
+```
+
+Luego, debes ir al `Makefile` en la raíz de este repositorio y descomentar la línea 37, que dice:
+
+```Makefile
+TOOLPREFIX = i386-elf-
+```
+
+Esto activará la variable `TOOLPREFIX` con el prefijo `i386-elf` para gcc y binutils, programas que se requieren para compilar correctamente xv6. Si no usas Mac, asegúrate de que dicha línea está comentada. 
+
+**Compilar e iniciar xv6**
+
 Para compilar e iniciar xv6, en el directorio en donde se encuentra el código de la tarea, se debe ejecutar el siguiente comando:
 
 ```sh 
