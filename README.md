@@ -217,6 +217,12 @@ Contamos con un test automatizado en espacio de usuario para la parte 1. El prog
 $./p1_syscalls_test
 ```
 
+**La compilación de `p1_syscalls_test` la tienes que activar descomentando la línea correspondiente en el `Makefile` (línea 190 aprox)**:
+
+```Makefile
+#	$U/_p1_syscalls_test\
+```
+
 El programa crea hijos en distintos grupos, cada hijo se auto-asigna su `gid` con `setgroup`(`getpid()`, `gid`), le avisa al padre su `pid` y `gid` por pipe, hace algo de trabajo (CPU o I/O), y termina.
 
 El padre usa `waitx(&w, &r)` para recoger tiempos y muestra una tabla `pid` / `gid` / `rtime` / `wtime`. Además, valida que setgroup haya surtido efecto.
@@ -458,7 +464,13 @@ Para evaluar la correcta implementación del planificador **Fair Share Scheduler
 - `rtime`: tiempo total en CPU (ticks).
 - `wtime`: tiempo total esperando (ticks).
 
-Además, reporta el total de tiempo de CPU usado por cada grupo y el reparto porcentual observado.  
+Además, reporta el total de tiempo de CPU usado por cada grupo y el reparto porcentual observado.
+
+**La compilación de `fss_bench` la tienes que activar descomentando la línea correspondiente en el Makefile (línea 190 aprox):**
+
+```Makefile
+#	$U/_fss_bench\
+```
 
 ### Script grade.sh
 

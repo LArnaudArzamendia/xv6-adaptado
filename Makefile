@@ -37,7 +37,7 @@ OBJS = \
 # TOOLPREFIX = i386-elf-
 
 # Using native tools (e.g., on X86 Linux)
-TOOLPREFIX = 
+#TOOLPREFIX = 
 
 # Try to infer the correct TOOLPREFIX if not set
 ifndef TOOLPREFIX
@@ -188,7 +188,8 @@ UPROGS=\
 	$U/_zombie\
 	$U/_testsh\
 	$U/_nsh\
-
+#	$U/_fss_bench\
+#	$U/_p1_syscalls_test\
 
 $U/fs.img: mkfs/mkfs README $(UPROGS)
 	mkfs/mkfs $U/fs.img README $(UPROGS)
@@ -293,4 +294,15 @@ tar:
 	cp dist/* dist/.gdbinit.tmpl /tmp/xv6
 	(cd /tmp; tar cf - xv6) | gzip >xv6-rev10.tar.gz  # the next one will be 10 (9/17)
 
-.PHONY: dist-test dist
+# Default values for variables used by grade.sh
+EXPECT_TIMEOUT ?= 80
+export EXPECT_TIMEOUT
+
+# QEMU_CMD is the command to run QEMU with the specified options.
+export QEMU_CMD := $(QEMU) -nographic $(QEMUOPTS)
+
+.PHONY: print-qemu-cmd dist-test dist
+print-qemu-cmd:
+	@echo $(QEMU) -nographic $(QEMUOPTS)
+
+

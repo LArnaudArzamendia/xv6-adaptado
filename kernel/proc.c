@@ -532,3 +532,29 @@ procdump(void)
     cprintf("\n");
   }
 }
+
+// Cuenta 1 tick a cada proceso según su estado.
+// Llamar en el handler de timer (trap.c) para cada tick.
+void
+tick_accounting(void)
+{
+  struct proc *p;
+
+  acquire(&ptable.lock);
+  for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
+    switch(p->state){
+    case RUNNING:
+      // p->rtime++;
+      break;
+    case RUNNABLE:
+      // p->wtime++;
+      break;
+    case SLEEPING:
+      // p->stime++;
+      break;
+    default:
+      break;
+    }
+  }
+  release(&ptable.lock);
+}
