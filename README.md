@@ -4,8 +4,8 @@ En esta primera tarea del curso trabajarás directamente con un kernel real. El 
 
 El objetivo de la tarea es introducirte en la programación a nivel de kernel (kernel hacking) y en la implementación de algoritmos de planificación de procesos. Para ello, la tarea se divide en dos etapas:
 
-* Parte 1.1 – Llamadas al sistema: deberás implementar nuevas syscalls en xv6 (`waitx`, `setgroup`, `getgroup`). Esta parte te permitirá comprender cómo se agregan funcionalidades al sistema operativo, cómo se comunican los programas de usuario con el kernel, y cómo se manejan estructuras internas de procesos.
-* Parte 1.2 – Planificador FSS (Fair Share Scheduler): utilizando las llamadas implementadas en la primera parte, modificarás el scheduler por defecto de xv6 para implementar un planificador basado en grupos, de manera que los procesos se repartan el tiempo de CPU en proporciones justas según su pertenencia a un grupo. Esta parte te permitirá observar de manera práctica cómo los algoritmos de planificación afectan al comportamiento del sistema.
+* Parte 1.1 – Fecha de entrega 5/9 - Llamadas al sistema: deberás implementar nuevas syscalls en xv6 (`waitx`, `setgroup`, `getgroup`). Esta parte te permitirá comprender cómo se agregan funcionalidades al sistema operativo, cómo se comunican los programas de usuario con el kernel, y cómo se manejan estructuras internas de procesos.
+* Parte 1.2 – Fecha de entrega 22/9 -  Planificador FSS (Fair Share Scheduler): utilizando las llamadas implementadas en la primera parte, modificarás el scheduler por defecto de xv6 para implementar un planificador basado en grupos, de manera que los procesos se repartan el tiempo de CPU en proporciones justas según su pertenencia a un grupo. Esta parte te permitirá observar de manera práctica cómo los algoritmos de planificación afectan al comportamiento del sistema.
 
 De esta forma, pasarás desde implementar llamadas básicas hasta alterar un componente central del sistema operativo: el scheduler. Esto te dará una visión concreta de cómo las abstracciones que estudias a nivel teórico (llamadas al sistema, procesos, planificación) se materializan en código real de un kernel.
 
