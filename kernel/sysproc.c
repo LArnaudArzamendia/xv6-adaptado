@@ -89,3 +89,30 @@ sys_uptime(void)
   release(&tickslock);
   return xticks;
 }
+
+int
+sys_waitx(void)
+{
+  int *pw, *pr;
+  if(argptr(0, (void*)&pw, sizeof(int)) < 0)
+    return -1;
+  if(argptr(1, (void*)&pr, sizeof(int)) < 0)
+    return -1;
+  return waitx(pw, pr);
+}
+
+int
+sys_getgroup(void)
+{
+  int pid;
+  if(argint(0, &pid) < 0) return -1;
+  return getgroup_k(pid);
+}
+
+int 
+sys_setgroup(void) {
+  int pid, gid;
+  if (argint(0, &pid) < 0) return -1;
+  if (argint(1, &gid) < 0) return -1;
+  return setgroup_k(pid, gid); // implementa en proc.c: busca proc y setea p->gid
+}

@@ -20,10 +20,13 @@ extern void trapret(void);
 
 static void wakeup1(void *chan);
 
+struct group gtable[NGROUPS]; // table of process groups
+
 void
 pinit(void)
 {
   initlock(&ptable.lock, "ptable");
+  fss_init_groups();
 }
 
 // Must be called with interrupts disabled
@@ -88,6 +91,13 @@ allocproc(void)
 found:
   p->state = EMBRYO;
   p->pid = nextpid++;
+
+  p->gid = 0;
+  fss_group_ensure(p->gid);
+
+  p->rtime = 0;
+  p->wtime = 0;
+  p->stime = 0;
 
   release(&ptable.lock);
 
@@ -198,6 +208,8 @@ fork(void)
   }
   np->sz = curproc->sz;
   np->parent = curproc;
+  np->gid = curproc->gid; // inherit group ID
+  
   *np->tf = *curproc->tf;
 
   // Clear %eax so that fork returns 0 in the child.
@@ -308,6 +320,54 @@ wait(void)
 
     // Wait for children to exit.  (See wakeup1 call in proc_exit.)
     sleep(curproc, &ptable.lock);  //DOC: wait-sleep
+  }
+}
+
+int
+waitx(int *wtime, int *rtime)
+{
+  struct proc *p;
+  int havekids, pid;
+
+  struct proc *curproc = myproc();
+
+  acquire(&ptable.lock);
+  for(;;){
+    // Scan through table looking for exited children.
+    havekids = 0;
+    for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
+      if(p->parent != curproc)
+        continue;
+      havekids = 1;
+      if(p->state == ZOMBIE){
+        // Keep times before releasing ptable.lock
+        if(wtime) *wtime = p->wtime;
+        if(rtime) *rtime = p->rtime;
+
+        // === same as in wait(): free child's resources ===
+        pid = p->pid;
+        kfree(p->kstack);
+        p->kstack = 0;
+        freevm(p->pgdir);
+        p->state = UNUSED;
+        p->pid = 0;
+        p->parent = 0;
+        p->name[0] = 0;
+        p->killed = 0;
+        p->rtime = p->wtime = p->stime = 0; // cleanup counters
+        release(&ptable.lock);
+        return pid;
+      }
+    }
+
+    // No children left.
+    if(!havekids || curproc->killed){
+      release(&ptable.lock);
+      return -1;
+    }
+
+    // Wait until something changes.
+    sleep(curproc, &ptable.lock);
   }
 }
 
@@ -544,17 +604,154 @@ tick_accounting(void)
   for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
     switch(p->state){
     case RUNNING:
-      // p->rtime++;
+      p->rtime++;
       break;
     case RUNNABLE:
-      // p->wtime++;
+      p->wtime++;
       break;
     case SLEEPING:
-      // p->stime++;
+      p->stime++;
       break;
     default:
       break;
     }
   }
   release(&ptable.lock);
+}
+
+int
+getgroup_k(int pid)
+{
+  struct proc *p;
+  int gid = -1;
+
+  acquire(&ptable.lock);
+  for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
+    if(p->pid == pid && p->state != UNUSED){
+      gid = p->gid;
+      break;
+    }
+  }
+  release(&ptable.lock);
+  return gid;
+}
+
+int
+setgroup_k(int pid, int gid)
+{
+  if(gid < 0) return -1;
+
+  acquire(&ptable.lock);
+  struct group *g = fss_group_ensure(gid);
+  if(g == 0){ release(&ptable.lock); return -1; }
+
+  for(struct proc *p = ptable.proc; p < &ptable.proc[NPROC]; p++){
+    if(p->pid == pid && p->state != UNUSED){
+      p->gid = gid;
+      release(&ptable.lock);
+      return 0;
+    }
+  }
+  release(&ptable.lock);
+  return -1;
+}
+
+static void
+fss_init_groups(void)
+{
+  for(int i = 0; i < NGROUPS; i++){
+    gtable[i].gid = 0;
+    gtable[i].active = 0;
+    gtable[i].pass = 0;
+    gtable[i].stride = FSS_BIG; // share=1
+    gtable[i].rr_cursor = 0;
+  }
+
+  // Initialize the default group (gid=0)
+  gtable[0].gid = 0;
+  gtable[0].active = 1;
+  gtable[0].pass = 0;
+  gtable[0].stride = FSS_BIG;
+  gtable[0].rr_cursor = 0;
+}
+
+static struct group*
+fss_group_lookup(int gid)
+{
+  for(int i = 0; i < NGROUPS; i++){
+    if(gtable[i].active && gtable[i].gid == gid) return &gtable[i];
+  }
+  return 0;
+}
+
+// Ensure that a group with the given gid exists in gtable.
+// If the group already exists, return a pointer to it.
+// Otherwise, allocate a new slot in gtable for the group,
+// initialize its fields (active=1, pass=0, stride=FSS_BIG, rr_cursor=0),
+// and return a pointer to the new group.
+// If no free slot is available, return 0.
+// Called with ptable.lock held, so it can safely modify gtable.
+static struct group*
+fss_group_ensure(int gid)
+{
+  struct group *g = fss_group_lookup(gid);
+  if(g) return g;
+  for(int i = 0; i < NGROUPS; i++){
+    if(!gtable[i].active){
+      gtable[i].active = 1;
+      gtable[i].gid = gid;
+      gtable[i].pass = 0;
+      gtable[i].stride = FSS_BIG; // share = 1 (todas iguales)
+      gtable[i].rr_cursor = 0;
+      return &gtable[i];
+    }
+  }
+  return 0; // no slots: unlikely in this implementation
+}
+
+// Does the group g have at least one RUNNABLE process?
+// Called with ptable.lock held.
+// Return 1 if at least one process in group g is RUNNABLE, else 0.
+static int
+fss_group_has_runnable(struct group *g)
+{
+  // TODO: iterate over ptable.proc[]
+  // TODO: check if p->state == RUNNABLE and p->gid == g->gid
+  // TODO: return 1 if such process is found
+  // Otherwise, return 0
+  return 0;
+}
+
+// Pick the group with the lowest pass value
+// that has at least one RUNNABLE process.
+// If no such group exists, return 0.
+// This function is used by the scheduler to select a group.
+// It is called with ptable.lock held, so it can safely
+// access gtable[] and ptable.proc[].
+static struct group*
+fss_pick_group(void)
+{
+  // TODO: initialize a pointer to best group (e.g., NULL)
+  // TODO: iterate over all groups in gtable[]
+  //   - skip if group is not active
+  //   - skip if fss_group_has_runnable(g) == 0
+  //   - track the group with the smallest pass value
+  // TODO: return pointer to best group found, or 0 if none
+  return 0;
+}
+
+// Pick a RUNNABLE process from group g using round-robin.
+// Called with ptable.lock held.
+// Returns a pointer to the selected process, or 0 if none is found.
+// Updates g->rr_cursor to remember the last scheduling position.
+static struct proc*
+fss_pick_proc_in_group(struct group *g)
+{
+  // TODO: use g->rr_cursor as a rotating index into ptable.proc[]
+  // TODO: perform one pass from rr_cursor to end of table
+  // TODO: if no candidate found, wrap around and try from 0 to rr_cursor-1
+  // TODO: check condition: p->state == RUNNABLE && p->gid == g->gid
+  // TODO: if found, update g->rr_cursor and return process pointer
+  // TODO: return 0 if no RUNNABLE process in group
+  return 0;
 }

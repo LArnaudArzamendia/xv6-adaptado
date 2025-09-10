@@ -24,6 +24,10 @@ char* sbrk(int);
 int sleep(int);
 int uptime(void);
 
+int waitx(int *wtime, int *rtime);
+int setgroup(int pid, int gid);
+int getgroup(int pid);
+
 // ulib.c
 int stat(const char*, struct stat*);
 char* strcpy(char*, const char*);

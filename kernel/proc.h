@@ -48,7 +48,11 @@ struct proc {
   int killed;                  // If non-zero, have been killed
   struct file *ofile[NOFILE];  // Open files
   struct inode *cwd;           // Current directory
-  char name[16];               // Process name (debugging)
+  char name[16];
+  int gid;                     // Process group ID
+  int rtime;                   // CPU running time (ticks in RUNNING)
+  int wtime;                   // waiting/ready time (ticks in RUNNABLE)
+  int stime;               // Process name (debugging)
 };
 
 // Process memory is laid out contiguously, low addresses first:
@@ -56,3 +60,25 @@ struct proc {
 //   original data and bss
 //   fixed-size stack
 //   expandable heap
+
+// --- Fair Share Scheduling (FSS) ---
+
+#define NGROUPS 16
+#define FSS_BIG 100000  // for stride scheduling, big enough to avoid overflow
+
+struct group {
+  int   gid;         // logical group ID
+  int   active;      // 0 if used, 1 otherwise
+  uint  pass;        // cummulative pass value (stride)
+  uint  stride;      // FSS_BIG / share (if share=1 => all processes in group have same priority)
+  int   rr_cursor;   // cursor for internal round-robin scheduling (last seen pid)
+};
+
+extern struct group gtable[NGROUPS];  // declared in proc.c
+
+static void fss_init_groups(void);
+static struct group* fss_group_lookup(int gid);
+static struct group* fss_group_ensure(int gid);
+static int fss_group_has_runnable(struct group *g);
+static struct group* fss_pick_group(void);
+static struct proc* fss_pick_proc_in_group(struct group *g);

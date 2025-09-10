@@ -451,6 +451,82 @@ Para robustez del algoritmo:
 En esta tarea usa shares iguales para todos los grupos:
  * `stride = FSS_BIG / 1`.
 
+### 7) Funciones pre-implementadas
+
+En `proc.h/.c` se incluyen algunas funciones de apoyo para la implementación del scheduler **Fair Share Scheduling (FSS)**.  
+Algunas están completas y otras se entregan como *stubs* (esqueleto con comentarios), para que ustedes las implementen.  
+
+Estas funciones sirven para manejar la tabla de grupos (`gtable`) y los procesos asociados a cada grupo, de modo que el scheduler pueda decidir qué grupo y qué proceso ejecutar.
+
+#### `static void fss_init_groups(void)`  
+**Estado:** completa  
+
+Inicializa la tabla de grupos (`gtable`).  
+Deja todos los grupos como inactivos (`active = 0`) y asegura que el sistema parte sin grupos registrados.  
+Se llama al inicio del kernel.
+
+#### `static struct group* fss_group_lookup(int gid)`  
+**Estado:** completa  
+
+Busca en la tabla de grupos (`gtable`) un grupo activo cuyo identificador (`gid`) coincida con el argumento.  
+- Si lo encuentra, retorna un puntero a ese grupo.  
+- Si no lo encuentra, retorna `0`.  
+
+Es útil cuando se necesita consultar si un grupo ya está registrado en el sistema.
+
+#### `static struct group* fss_group_ensure(int gid)`  
+**Estado:** *stub*  
+
+Garantiza que exista un grupo con el `gid` dado.  
+- Si ya existe, lo retorna directamente.  
+- Si no existe, busca un slot libre en la `gtable`, inicializa un nuevo grupo (activo, con `pass = 0`, `stride = FSS_BIG` y `rr_cursor = 0`) y lo retorna.  
+- Si no hay espacio en la `gtable`, retorna `0` (caso muy poco común en xv6).  
+
+👉 Esta función es la forma estándar de asegurarse de que un `gid` tenga un grupo válido en memoria.
+
+#### `static int fss_group_has_runnable(struct group *g)`  
+**Estado:** *stub*  
+
+Verifica si un grupo tiene **al menos un proceso en estado RUNNABLE**.  
+- Recorre la tabla de procesos (`ptable.proc`) y busca procesos cuyo `gid` coincida con el del grupo y estén en estado `RUNNABLE`.  
+- Retorna `1` si encuentra alguno, o `0` si no hay procesos listos para correr en ese grupo.  
+
+Esta función permite saber si un grupo puede ser considerado por el scheduler.
+
+#### `static struct group* fss_pick_group(void)`  
+**Estado:** *stub*  
+
+Selecciona el **grupo candidato a ejecutar** según FSS.  
+- Recorre todos los grupos activos en la `gtable`.  
+- Descarta los grupos sin procesos RUNNABLE.  
+- Elige el grupo con el **menor valor de `pass`** (el que ha consumido menos CPU en términos relativos).  
+- Si no hay grupos válidos, retorna `0`.  
+
+Es la función que decide **qué grupo tiene el turno de CPU**.
+
+#### `static struct proc* fss_pick_proc_in_group(struct group *g)`  
+**Estado:** *stub*  
+
+Selecciona un proceso dentro de un grupo dado, usando **round-robin**:  
+- Comienza desde la posición `rr_cursor` del grupo.  
+- Busca un proceso `RUNNABLE` en `ptable.proc` con el mismo `gid`.  
+- Si encuentra uno, lo retorna y actualiza `rr_cursor` para la próxima vez.  
+- Si no encuentra en la primera pasada, envuelve y busca desde el inicio hasta `rr_cursor`.  
+- Si no hay ninguno, retorna `0`.  
+
+Permite repartir la CPU de manera justa **entre los procesos de un mismo grupo**.
+
+### Resumen del rol de estas funciones
+
+- **Inicialización y lookup:** `fss_init_groups`, `fss_group_lookup`, `fss_group_ensure`  
+- **Chequeo de procesos disponibles:** `fss_group_has_runnable`  
+- **Selección de grupo y proceso:** `fss_pick_group`, `fss_pick_proc_in_group`
+
+En conjunto, estas funciones permiten que el scheduler FSS:
+1. Mantenga los grupos organizados.  
+2. Elija el grupo menos favorecido en CPU (`pass` más bajo).  
+3. Dentro de ese grupo, elija un proceso en orden circular (round-robin).  
+
 ## Casos de prueba (35% de la nota)
 
 Para evaluar la correcta implementación del planificador **Fair Share Scheduler (FSS)**, se entrega una herramienta de pruebas llamada **fss_bench** junto con un script de automatización **grade.sh**.  

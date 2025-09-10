@@ -121,6 +121,9 @@ int             wait(void);
 void            wakeup(void*);
 void            yield(void);
 void            tick_accounting(void);
+int             waitx(int *wtime, int *rtime);
+int             setgroup_k(int pid, int gid);
+int             getgroup_k(int pid);
 
 // swtch.S
 void            swtch(struct context**, struct context*);

@@ -34,7 +34,7 @@ OBJS = \
 
 # Cross-compiling (e.g., on Mac OS X)
 # TOOLPREFIX = i386-jos-elf
-# TOOLPREFIX = i386-elf-
+TOOLPREFIX = i386-elf-
 
 # Using native tools (e.g., on X86 Linux)
 #TOOLPREFIX = 
@@ -188,8 +188,8 @@ UPROGS=\
 	$U/_zombie\
 	$U/_testsh\
 	$U/_nsh\
-#	$U/_fss_bench\
-#	$U/_p1_syscalls_test\
+	$U/_fss_bench\
+	$U/_p1_syscalls_test\
 
 $U/fs.img: mkfs/mkfs README $(UPROGS)
 	mkfs/mkfs $U/fs.img README $(UPROGS)
