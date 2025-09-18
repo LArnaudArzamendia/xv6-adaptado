@@ -69,8 +69,8 @@ struct proc {
 struct group {
   int   gid;         // logical group ID
   int   active;      // 0 if used, 1 otherwise
-  uint  pass;        // cummulative pass value (stride)
-  uint  stride;      // FSS_BIG / share (if share=1 => all processes in group have same priority)
+  uint  pass;        // cummulative pass value (stride). Es el crédito acumulado de CPU recibido por el grupo.
+  uint  stride;      // FSS_BIG / share (if share=1 => all processes in group have same priority). Share es la participación del grupo.
   int   rr_cursor;   // cursor for internal round-robin scheduling (last seen pid)
 };
 

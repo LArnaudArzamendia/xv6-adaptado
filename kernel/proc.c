@@ -152,6 +152,10 @@ userinit(void)
   safestrcpy(p->name, "initcode", sizeof(p->name));
   p->cwd = namei("/");
 
+  // Asegurar grupo 0 y que el grupo existe.
+  p->gid = 0;
+  fss_group_ensure(0);
+
   // this assignment to p->state lets other cores
   // run this process. the acquire forces the above
   // writes to be visible, and the lock is also needed
@@ -209,6 +213,7 @@ fork(void)
   np->sz = curproc->sz;
   np->parent = curproc;
   np->gid = curproc->gid; // inherit group ID
+  fss_group_ensure(np->gid);
   
   *np->tf = *curproc->tf;
 
@@ -382,7 +387,6 @@ waitx(int *wtime, int *rtime)
 void
 scheduler(void)
 {
-  struct proc *p;
   struct cpu *c = mycpu();
   c->proc = 0;
   
@@ -390,26 +394,36 @@ scheduler(void)
     // Enable interrupts on this processor.
     sti();
 
-    // Loop over process table looking for process to run.
     acquire(&ptable.lock);
-    for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
-      if(p->state != RUNNABLE)
-        continue;
-
-      // Switch to chosen process.  It is the process's job
-      // to release ptable.lock and then reacquire it
-      // before jumping back to us.
-      c->proc = p;
-      switchuvm(p);
-      p->state = RUNNING;
-
-      swtch(&(c->scheduler), p->context);
-      switchkvm();
-
-      // Process is done running for now.
-      // It should have changed its p->state before coming back.
-      c->proc = 0;
+    // Elegir grupo con menor pass que tenga RUNNABLEs.
+    struct group *g = fss_pick_group();
+    if(g == 0){
+      // No hay nada listo ahora.
+      release(&ptable.lock);
+      continue;
     }
+
+    // RR dentro del grupo.
+    struct proc *p = fss_pick_proc_in_group(g);
+    if(p == 0){
+      // Grupo sin procesos RUNNABLE.
+      release(&ptable.lock);
+      continue;
+    }
+
+    // Despacho.
+    c->proc = p;
+    switchuvm(p);
+    p->state = RUNNING;
+
+    swtch(&c->scheduler, p->context);
+    switchkvm();
+
+    // Limpiar puntero CPU-proceso.
+    c->proc = 0;
+
+    // Incrementar pass del grupo que corrió.
+    g->pass += g->stride;
     release(&ptable.lock);
 
   }
@@ -657,7 +671,7 @@ setgroup_k(int pid, int gid)
 }
 
 static void
-fss_init_groups(void)
+fss_init_groups(void) // Inicializar tabla de grupos.
 {
   for(int i = 0; i < NGROUPS; i++){
     gtable[i].gid = 0;
@@ -676,7 +690,7 @@ fss_init_groups(void)
 }
 
 static struct group*
-fss_group_lookup(int gid)
+fss_group_lookup(int gid) // Buscar un grupo activo por su gid.
 {
   for(int i = 0; i < NGROUPS; i++){
     if(gtable[i].active && gtable[i].gid == gid) return &gtable[i];
@@ -692,7 +706,7 @@ fss_group_lookup(int gid)
 // If no free slot is available, return 0.
 // Called with ptable.lock held, so it can safely modify gtable.
 static struct group*
-fss_group_ensure(int gid)
+fss_group_ensure(int gid) // Asegurar que un grupo con gid existe.
 {
   struct group *g = fss_group_lookup(gid);
   if(g) return g;
@@ -713,11 +727,16 @@ fss_group_ensure(int gid)
 // Called with ptable.lock held.
 // Return 1 if at least one process in group g is RUNNABLE, else 0.
 static int
-fss_group_has_runnable(struct group *g)
+fss_group_has_runnable(struct group *g) // Verificar si el grupo tiene procesos RUNNABLE.
 {
   // TODO: iterate over ptable.proc[]
-  // TODO: check if p->state == RUNNABLE and p->gid == g->gid
-  // TODO: return 1 if such process is found
+  for(struct proc *p = ptable.proc; p < &ptable.proc[NPROC]; p++) {
+    // TODO: check if p->state == RUNNABLE and p->gid == g->gid
+    if(p->state == RUNNABLE && p->gid == g->gid) {
+      // TODO: return 1 if such process is found
+      return 1;
+    }
+  }
   // Otherwise, return 0
   return 0;
 }
@@ -732,12 +751,18 @@ static struct group*
 fss_pick_group(void)
 {
   // TODO: initialize a pointer to best group (e.g., NULL)
+  struct group *best = 0;
   // TODO: iterate over all groups in gtable[]
-  //   - skip if group is not active
-  //   - skip if fss_group_has_runnable(g) == 0
-  //   - track the group with the smallest pass value
+  for(int i = 0; i < NGROUPS; i++) {
+    if(!gtable[i].active) continue; // skip if group is not active.
+    struct group *g = &gtable[i];
+    if(!fss_group_has_runnable(g)) continue; // skip if no RUNNABLE processes.
+    if(best == 0 || g->pass < best->pass || (g->pass == best->pass && g->gid < best->gid)) { // track the group with the smallest pass value
+      best = g; // found a better group with lower pass value.
+    }
+  }
   // TODO: return pointer to best group found, or 0 if none
-  return 0;
+  return best;
 }
 
 // Pick a RUNNABLE process from group g using round-robin.
@@ -747,11 +772,22 @@ fss_pick_group(void)
 static struct proc*
 fss_pick_proc_in_group(struct group *g)
 {
+  if(!g) return 0;// Ver si no hay grupo de primeras.
   // TODO: use g->rr_cursor as a rotating index into ptable.proc[]
+  int start = g->rr_cursor % NPROC; // % NPROC para el overflow.
   // TODO: perform one pass from rr_cursor to end of table
+
   // TODO: if no candidate found, wrap around and try from 0 to rr_cursor-1
-  // TODO: check condition: p->state == RUNNABLE && p->gid == g->gid
-  // TODO: if found, update g->rr_cursor and return process pointer
+  for(int j = 0; j < NPROC; j++) {
+    int i = (start + j) % NPROC;
+    struct proc *p = &ptable.proc[i];
+    // TODO: check condition: p->state == RUNNABLE && p->gid == g->gid
+    if(p->state == RUNNABLE && p->gid == g->gid) {
+      // TODO: if found, update g->rr_cursor and return process pointer
+      g->rr_cursor = (i + 1) % NPROC; // Siguiente punto de partida.
+      return p;
+    }
+  }
   // TODO: return 0 if no RUNNABLE process in group
   return 0;
 }
